@@ -1,0 +1,11 @@
+[package]
+name = "ringr"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ringr"
+path = "src/main.rs"
+
+[dependencies]
+rppal = "0.17.1"

@@ -5,11 +5,11 @@ all: build
 
 .PHONY: build
 build:
-	cargo build --target=arm-unknown-linux-musleabi
+	cross build --target=aarch64-unknown-linux-gnu
 
 .PHONY: copy
 copy: build
-	scp target/arm-unknown-linux-musleabi/debug/ringr andrew@$(PI_TARGET):~/ringr
+	scp target/aarch64-unknown-linux-gnu/debug/ringr andrew@$(PI_TARGET):~/ringr
 
 .PHONY: ssh
 ssh:

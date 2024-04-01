@@ -2,7 +2,7 @@ use std::error::Error;
 use std::thread;
 use std::time::Duration;
 
-use rppal::gpio::{Gpio, OutputPin, Trigger, Level};
+use rppal::gpio::{Gpio, Level, OutputPin, Trigger};
 use soloud::*;
 
 // Gpio uses BCM pin numbering.
@@ -49,17 +49,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     })?;
 
-    white_button.set_async_interrupt(Trigger::FallingEdge,
-                                 move |_| {
-    ring(4, &mut motor_enable, &mut motor_1, &mut motor_2);
-                                 })?;
+    white_button.set_async_interrupt(Trigger::FallingEdge, move |_| {
+        ring(4, &mut motor_enable, &mut motor_1, &mut motor_2);
+    })?;
 
     thread::sleep(Duration::from_secs(10000));
 
     Ok(())
 }
 
-fn ring(number: u32, motor_enable: &mut OutputPin, motor_1: &mut OutputPin, motor_2: &mut OutputPin) {
+fn ring(
+    number: u32,
+    motor_enable: &mut OutputPin,
+    motor_1: &mut OutputPin,
+    motor_2: &mut OutputPin,
+) {
     motor_enable.write(Level::High);
     println!("Starting ringing");
 

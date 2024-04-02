@@ -28,8 +28,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let sl = Soloud::default().expect("Could not get Soloud");
     let mut speech = audio::Speech::default();
-    let mut buzz = audio::Wav::default();
-    buzz.load_mem(include_bytes!("../audio/buzz.wav")).unwrap();
     speech.set_text("Yes?")?;
 
     thread::spawn(move || heartbeat(green));

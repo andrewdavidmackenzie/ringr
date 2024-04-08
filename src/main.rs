@@ -24,6 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut speech = audio::Speech::default();
     speech.set_text("Yes?")?;
 
+    // initial hangup switch position
+    println!("Hookup: {}", hookup.read());
+
     // startup ring
     ring(8, &mut motor_enable, &mut motor_1, &mut motor_2);
 

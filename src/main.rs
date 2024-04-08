@@ -6,8 +6,6 @@ use rppal::gpio::{Gpio, Level, OutputPin, Trigger};
 use soloud::*;
 
 // Gpio uses BCM pin numbering.
-const GPIO_GREEN_LED: u8 = 17; // Pin #11
-const GPIO_RED_LED: u8 = 27; // Pin #13
 const GPIO_WHITE_BUTTON: u8 = 2; // Pin #3
 const HOOK_UP: u8 = 3; // Pin #5
 const MOTOR_ENABLE: u8 = 16;
@@ -19,10 +17,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut motor_1 = Gpio::new()?.get(MOTOR_1)?.into_output();
     let mut motor_2 = Gpio::new()?.get(MOTOR_2)?.into_output();
 
-    let green = Gpio::new()?.get(GPIO_GREEN_LED)?.into_output();
-    let mut red = Gpio::new()?.get(GPIO_RED_LED)?.into_output();
-    red.write(Level::Low);
-
     let mut white_button = Gpio::new()?.get(GPIO_WHITE_BUTTON)?.into_input_pullup();
     let mut hookup = Gpio::new()?.get(HOOK_UP)?.into_input_pullup();
 
@@ -30,13 +24,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut speech = audio::Speech::default();
     speech.set_text("Yes?")?;
 
-    thread::spawn(move || heartbeat(green));
-
-    // setup initial value
-    red.write(hookup.read());
+    // startup ring
+    ring(8, &mut motor_enable, &mut motor_1, &mut motor_2);
 
     hookup.set_async_interrupt(Trigger::Both, move |level| {
-        red.write(level);
+        println!("Hookup: {level}");
         match level {
             Level::Low => {}
             Level::High => {
@@ -91,11 +83,4 @@ fn ring(
     motor_1.write(Level::Low);
     motor_2.write(Level::Low);
     motor_enable.write(Level::Low);
-}
-
-fn heartbeat(mut pin: OutputPin) {
-    loop {
-        pin.toggle();
-        thread::sleep(Duration::from_millis(500));
-    }
 }

@@ -8,6 +8,11 @@ name = "ringr"
 path = "src/main.rs"
 
 [dependencies]
+# for interacting with GPIO on the Raspberry Pi
 rppal = "0.17.1"
-#soloud = { version = "1", default-features = false, features = ["alsa"] }
+
+# for playing sounds or speach synthesis
 soloud = { version = "1" }
+
+# for installing as a system service
+service-manager = "0.6.0"

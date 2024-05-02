@@ -43,7 +43,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut white_button = Gpio::new()?.get(GPIO_WHITE_BUTTON)?.into_input_pullup();
     let mut hookup = Gpio::new()?.get(HOOK_UP)?.into_input_pullup();
 
-    let sl = Soloud::default().expect("Could not get Soloud");
+    let sl = Soloud::default();
     let mut speech = audio::Speech::default();
     speech.set_text("Yes?")?;
 
@@ -64,7 +64,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                 print!("Off the hook");
                 thread::sleep(Duration::from_millis(700));
                 println!("Yes?");
-                sl.play(&speech);
+                if let Ok(sound) = &sl {
+                    sound.play(&speech);
+                }
 
                 let _ = debounce(&mut hookup, Trigger::RisingEdge)?;
                 println!("Back on the hook");

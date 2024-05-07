@@ -44,7 +44,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let mut hookup = Gpio::new()?.get(HOOK_UP)?.into_input_pullup();
 
     let sl = Soloud::default();
-    let mut speech = audio::Speech::default();
+    let mut speech = Speech::default();
     speech.set_text("Yes?")?;
 
     // initial hangup switch position

@@ -1,5 +1,7 @@
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::sync::mpsc::{SendError, Sender};
 use std::time::Duration;
 use std::{env, io, thread};
 
@@ -36,9 +38,9 @@ fn main() -> Result<(), io::Error> {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let mut motor_enable = Gpio::new()?.get(MOTOR_ENABLE)?.into_output();
-    let mut motor_1 = Gpio::new()?.get(MOTOR_1)?.into_output();
-    let mut motor_2 = Gpio::new()?.get(MOTOR_2)?.into_output();
+    let motor_enable = Gpio::new()?.get(MOTOR_ENABLE)?.into_output();
+    let motor_1 = Gpio::new()?.get(MOTOR_1)?.into_output();
+    let motor_2 = Gpio::new()?.get(MOTOR_2)?.into_output();
 
     let mut white_button = Gpio::new()?.get(GPIO_WHITE_BUTTON)?.into_input_pullup();
     let mut hookup = Gpio::new()?.get(HOOK_UP)?.into_input_pullup();
@@ -50,11 +52,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     // initial hangup switch position
     println!("Hookup: {}", hookup.read());
 
+    let ringr = start_ringr_service(motor_enable, motor_1, motor_2);
+
     // startup ring
-    ring(8, &mut motor_enable, &mut motor_1, &mut motor_2);
+    let _ = ring(ringr.clone(), 8);
 
     white_button.set_async_interrupt(Trigger::FallingEdge, move |_| {
-        ring(4, &mut motor_enable, &mut motor_1, &mut motor_2);
+        let _ = ring(ringr.clone(), 4);
     })?;
 
     loop {
@@ -75,6 +79,50 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 }
 
+// start a background thread that will serve ring requests
+fn start_ringr_service(
+    mut motor_enable: OutputPin,
+    mut motor_1: OutputPin,
+    mut motor_2: OutputPin,
+) -> Sender<u32> {
+    let (tx, rx) = mpsc::channel::<u32>();
+    let _ = thread::spawn(move || loop {
+        if let Ok(number) = rx.recv() {
+            motor_enable.write(Level::High);
+            println!("Starting ringing");
+
+            for _ in 0..number {
+                motor_1.write(Level::High);
+                motor_2.write(Level::Low);
+
+                thread::sleep(Duration::from_millis(15));
+
+                motor_1.write(Level::Low);
+                motor_2.write(Level::Low);
+
+                thread::sleep(Duration::from_millis(5));
+
+                motor_1.write(Level::Low);
+                motor_2.write(Level::High);
+
+                thread::sleep(Duration::from_millis(15));
+
+                motor_1.write(Level::Low);
+                motor_2.write(Level::Low);
+
+                thread::sleep(Duration::from_millis(5));
+            }
+
+            println!("Done ringing");
+            motor_1.write(Level::Low);
+            motor_2.write(Level::Low);
+            motor_enable.write(Level::Low);
+        }
+    });
+
+    tx
+}
+
 fn debounce(pin: &mut InputPin, trigger: Trigger) -> Result<Level, Box<dyn Error>> {
     pin.set_interrupt(trigger)?;
 
@@ -92,41 +140,8 @@ fn debounce(pin: &mut InputPin, trigger: Trigger) -> Result<Level, Box<dyn Error
     }
 }
 
-fn ring(
-    number: u32,
-    motor_enable: &mut OutputPin,
-    motor_1: &mut OutputPin,
-    motor_2: &mut OutputPin,
-) {
-    motor_enable.write(Level::High);
-    println!("Starting ringing");
-
-    for _ in 0..number {
-        motor_1.write(Level::High);
-        motor_2.write(Level::Low);
-
-        thread::sleep(Duration::from_millis(15));
-
-        motor_1.write(Level::Low);
-        motor_2.write(Level::Low);
-
-        thread::sleep(Duration::from_millis(5));
-
-        motor_1.write(Level::Low);
-        motor_2.write(Level::High);
-
-        thread::sleep(Duration::from_millis(15));
-
-        motor_1.write(Level::Low);
-        motor_2.write(Level::Low);
-
-        thread::sleep(Duration::from_millis(5));
-    }
-
-    println!("Done ringing");
-    motor_1.write(Level::Low);
-    motor_2.write(Level::Low);
-    motor_enable.write(Level::Low);
+fn ring(tx: Sender<u32>, number: u32) -> Result<(), SendError<u32>> {
+    tx.send(number)
 }
 
 fn get_service_manager() -> Result<Box<dyn ServiceManager>, io::Error> {

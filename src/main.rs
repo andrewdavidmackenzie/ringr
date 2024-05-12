@@ -1,3 +1,4 @@
+use chrono::{Days, Timelike};
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -5,7 +6,7 @@ use std::sync::mpsc::{SendError, Sender};
 use std::time::Duration;
 use std::{env, io, thread};
 
-use rppal::gpio::{Gpio, InputPin, Level, OutputPin, Trigger};
+use rppal::gpio::{Gpio, InputPin, Level, Trigger};
 use service_manager::{
     ServiceInstallCtx, ServiceLabel, ServiceManager, ServiceStartCtx, ServiceStopCtx,
     ServiceUninstallCtx,
@@ -38,11 +39,26 @@ fn main() -> Result<(), io::Error> {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let motor_enable = Gpio::new()?.get(MOTOR_ENABLE)?.into_output();
-    let motor_1 = Gpio::new()?.get(MOTOR_1)?.into_output();
-    let motor_2 = Gpio::new()?.get(MOTOR_2)?.into_output();
-
     let mut white_button = Gpio::new()?.get(GPIO_WHITE_BUTTON)?.into_input_pullup();
+
+    let ringr = start_ringr_service()?;
+
+    // chime the hours
+    start_chime_service(9, 19, ringr.clone());
+
+    // ring every time the white button is pressed
+    white_button.set_async_interrupt(Trigger::FallingEdge, move |_| {
+        let _ = ring(ringr.clone(), 4);
+    })?;
+
+    // start a loop that waits for unhook events and then acts
+    start_chat_service()?;
+
+    Ok(())
+}
+
+// loop waiting for the phone to be picked up (unhooked) then chat with the user
+fn start_chat_service() -> Result<(), Box<dyn Error>> {
     let mut hookup = Gpio::new()?.get(HOOK_UP)?.into_input_pullup();
 
     let sl = Soloud::default();
@@ -51,15 +67,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     // initial hangup switch position
     println!("Hookup: {}", hookup.read());
-
-    let ringr = start_ringr_service(motor_enable, motor_1, motor_2);
-
-    // startup ring
-    let _ = ring(ringr.clone(), 8);
-
-    white_button.set_async_interrupt(Trigger::FallingEdge, move |_| {
-        let _ = ring(ringr.clone(), 4);
-    })?;
 
     loop {
         match debounce(&mut hookup, Trigger::FallingEdge)? {
@@ -79,12 +86,33 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 }
 
-// start a background thread that will serve ring requests
-fn start_ringr_service(
-    mut motor_enable: OutputPin,
-    mut motor_1: OutputPin,
-    mut motor_2: OutputPin,
-) -> Sender<u32> {
+// start a background thread that will chime the hours
+fn start_chime_service(min: u32, max: u32, ringr: Sender<u32>) {
+    let _ = thread::spawn(move || loop {
+        let now = chrono::offset::Local::now();
+        let mut next = match now.with_hour(now.hour() + 1) {
+            Some(next_today) if next_today.hour() <= max => next_today,
+            _ => {
+                let tomorrow = now.checked_add_days(Days::new(1)).unwrap();
+                tomorrow.with_hour(min).unwrap()
+            }
+        };
+        next = next.with_minute(0).unwrap().with_second(0).unwrap();
+        println!("now = {}, next = {}", now, next);
+        println!("Sleeping for: {:?}", (next - now).to_std().unwrap());
+        thread::sleep((next - now).to_std().unwrap());
+        ring(ringr.clone(), 2).unwrap()
+    });
+}
+
+// start a background thread that will serve ring requests from any other thread requesting it
+// by sending a ring request (with a number of rings to do) via a channel.
+// Returns the Sender to use
+fn start_ringr_service() -> Result<Sender<u32>, Box<dyn Error>> {
+    let mut motor_enable = Gpio::new()?.get(MOTOR_ENABLE)?.into_output();
+    let mut motor_1 = Gpio::new()?.get(MOTOR_1)?.into_output();
+    let mut motor_2 = Gpio::new()?.get(MOTOR_2)?.into_output();
+
     let (tx, rx) = mpsc::channel::<u32>();
     let _ = thread::spawn(move || loop {
         if let Ok(number) = rx.recv() {
@@ -120,7 +148,10 @@ fn start_ringr_service(
         }
     });
 
-    tx
+    // do a startup ring - so we know it's working
+    let _ = ring(tx.clone(), 8);
+
+    Ok(tx)
 }
 
 fn debounce(pin: &mut InputPin, trigger: Trigger) -> Result<Level, Box<dyn Error>> {
@@ -140,8 +171,8 @@ fn debounce(pin: &mut InputPin, trigger: Trigger) -> Result<Level, Box<dyn Error
     }
 }
 
-fn ring(tx: Sender<u32>, number: u32) -> Result<(), SendError<u32>> {
-    tx.send(number)
+fn ring(ringr: Sender<u32>, number: u32) -> Result<(), SendError<u32>> {
+    ringr.send(number)
 }
 
 fn get_service_manager() -> Result<Box<dyn ServiceManager>, io::Error> {

@@ -1,7 +1,7 @@
 PI_TARGET := pizero2w0.local
 
 .PHONY: all
-all: build
+all: clippy build
 
 .PHONY: clippy
 clippy:
